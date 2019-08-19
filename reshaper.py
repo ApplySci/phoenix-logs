@@ -28,7 +28,6 @@ class Reshaper:
         '''
         children = self.game.getchildren()
         child_count = len(children)
-        outcome = None
         ptr = 0
         game_out = etree.XML('<GAME id="%s"/>' % self.log_id)
 
@@ -38,11 +37,16 @@ class Reshaper:
             ptr += 1
             if child.tag == 'INIT':
                 self.init_hand_vars(child)
-            elif child.tag in ['SHUFFLE', 'BYE',]:
+            elif child.tag in ['SHUFFLE', 'GO', 'TAIKYOKU',]:
                 pass
-            elif child.tag in ['GO', 'UN', 'TAIKYOKU', 'DORA']:
-                if self.current_hand is None:
-                    game_out.append(child)
+            elif child.tag == 'BYE':
+                # TODO
+                game_out.append(child)
+            elif child.tag == 'UN' and self.current_hand is None:
+                for key in child.attrib:
+                    game_out.attrib[key] = child.attrib[key]
+            elif child.tag == 'DORA':
+                game_out.append(child)
             elif child.tag == 'AGARI':
                 self.handle_win(child)
                 game_out.append(self.current_hand)
@@ -70,11 +74,16 @@ class Reshaper:
             self.sep[i] = ''
             self.discards[i] = ''
             self.last_drawn[i] = ''
-        self.current_hand = etree.XML('<HAND />') # TODO dealer
+        self.current_hand = etree.XML('<HAND />')
+        for key in ['oya', 'hai0', 'hai1', 'hai2', 'hai3', 'ten',]:
+            self.current_hand.attrib[key] = child.attrib[key]
 
     def handle_draw(self, child):
         self.current_hand.attrib['result'] = str(DRAWS[child.get('type') or 'exhaustive'])
         self.current_hand.attrib['scores'] = self.get_deltas(child)
+        # TODO horrifically, it seems that the only way to find out what the
+        #      dora was, when it was a draw, is to recreate the wall from
+        #      the seed
 
     def handle_win(self, child):
         self.current_hand.attrib['result'] = str(OUTCOMES['Tsumo']
