@@ -20,6 +20,7 @@ class Reshaper:
         self.log_id = log_id
         self.game = game
         self.current_hand = None
+        self.game_out = etree.XML('<GAME id="%s"/>' % self.log_id)
 
     def process(self):
         '''
@@ -29,7 +30,6 @@ class Reshaper:
         children = self.game.getchildren()
         child_count = len(children)
         ptr = 0
-        game_out = etree.XML('<GAME id="%s"/>' % self.log_id)
 
         while ptr < child_count:
             # iterate over every event in game
@@ -37,23 +37,25 @@ class Reshaper:
             ptr += 1
             if child.tag == 'INIT':
                 self.init_hand_vars(child)
-            elif child.tag in ['SHUFFLE', 'GO', 'TAIKYOKU',]:
-                pass
+            elif child.tag in ['GO', 'TAIKYOKU',]:
+                pass # no action needed - all our games are in the same lobby
+            elif child.tag == 'SHUFFLE':
+                self.game_out.attrib['seed'] = child.attrib['seed']
             elif child.tag == 'BYE':
                 # TODO
-                game_out.append(child)
+                self.game_out.append(child)
             elif child.tag == 'UN' and self.current_hand is None:
                 for key in child.attrib:
-                    game_out.attrib[key] = child.attrib[key]
+                    self.game_out.attrib[key] = child.attrib[key]
             elif child.tag == 'DORA':
-                game_out.append(child)
+                self.game_out.append(child)
             elif child.tag == 'AGARI':
                 self.handle_win(child)
-                game_out.append(self.current_hand)
+                self.game_out.append(self.current_hand)
                 # TODO maybe check for double ron
             elif child.tag == 'RYUUKYOKU':
                 self.handle_draw(child)
-                game_out.append(self.current_hand)
+                self.game_out.append(self.current_hand)
             elif child.tag[0] in ('D', 'E', 'F', 'G'):
                 self.current_hand.append(self.discard_to_xml(child))
             elif child.tag[0] in ('T', 'U', 'V', 'W'):
@@ -66,7 +68,7 @@ class Reshaper:
                 # unknown tag
                 self.log_error('ERROR unknown tag: %s in %s' % (child.tag, self.log_id))
 
-        return game_out
+        return self.game_out
 
     def init_hand_vars(self, child):
         ''' initialise instance variables that describe this hand '''
@@ -75,12 +77,13 @@ class Reshaper:
             self.discards[i] = ''
             self.last_drawn[i] = ''
         self.current_hand = etree.XML('<HAND />')
-        for key in ['oya', 'hai0', 'hai1', 'hai2', 'hai3', 'ten',]:
+        for key in ['oya', 'hai0', 'hai1', 'hai2', 'hai3', 'ten', 'seed',]:
             self.current_hand.attrib[key] = child.attrib[key]
 
     def handle_draw(self, child):
         self.current_hand.attrib['result'] = str(DRAWS[child.get('type') or 'exhaustive'])
         self.current_hand.attrib['scores'] = self.get_deltas(child)
+        self.handle_owari(child)
         # TODO horrifically, it seems that the only way to find out what the
         #      dora was, when it was a draw, is to recreate the wall from
         #      the seed
@@ -89,7 +92,12 @@ class Reshaper:
         self.current_hand.attrib['result'] = str(OUTCOMES['Tsumo']
             if child.get('who') == child.get('fromWho') else
             OUTCOMES['Ron'])
-        # TODO
+        self.current_hand.attrib['scores'] = self.get_deltas(child)
+        for key in ['yaku', 'hai', 'doraHai', 'who', 'fromWho', 'ba', 'ten',]:
+            self.current_hand.attrib[key] = child.attrib[key]
+        # TODO handle double-ron
+
+        self.handle_owari(child)
 
     def process_call(self, child):
         ''' handle one called tile '''
@@ -173,6 +181,10 @@ class Reshaper:
                 out -= 1
 
         return out
+
+    def handle_owari(self, child):
+        if 'owari' in child.attrib:
+            self.game_out.attrib['owari'] = child.attrib['owari']
 
     @staticmethod
     def get_deltas(elem):

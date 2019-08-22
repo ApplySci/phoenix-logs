@@ -35,8 +35,9 @@ for year in range(2019, 2020): # 2011
                 game = etree.XML(content, etree.XMLParser(recover=True))
                 parent.append(Reshaper(game, log[0]).process())
 
+            out = etree.tostring(parent, encoding='utf-8', pretty_print=False)
             with open(db_dir + '/' + this_date + '.bz2', 'wb') as f:
-                f.write(bz2.compress(etree.tostring(parent, encoding='utf-8', pretty_print=False)))
+                f.write(bz2.compress(out))
 
-with open(db_dir + '/xml.txt', 'wb') as f:
-    f.write(content)
+with open(db_dir + '/new.xml', 'wb') as f:
+    f.write(out)
